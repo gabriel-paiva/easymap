@@ -59,7 +59,7 @@ export const useDraw = ({ color } : { color: string}) => {
 
         const computePointInCanvas = (event: MouseEvent): Point | null => {
             const canvas = canvasRef.current;
-            
+
             if(!canvas) return null;
 
             const rect = canvas.getBoundingClientRect();
@@ -78,7 +78,7 @@ export const useDraw = ({ color } : { color: string}) => {
             currentCanvas?.removeEventListener('mousemove', mouseMoveHandler);
             window.removeEventListener('mouseup', mouseUpHandler)
         }
-        
+
     }, [onDraw, isMouseDown]);
 
     return { canvasRef, onMouseDown, onClear };

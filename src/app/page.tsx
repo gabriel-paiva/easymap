@@ -11,7 +11,7 @@ const Home = (): ReactElement => {
   return (
     <main className="w-screen h-screen bg-white flex justify-center items-center">
       <div className="flex flex-col gap-10 pr-10">
-      <ChromePicker 
+      <ChromePicker
         color={color}
         onChange={(event) => setColor(event.hex)}
       />
