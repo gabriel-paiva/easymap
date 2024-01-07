@@ -1,9 +1,13 @@
 type Draw = {
-    context: CanvasRenderingContext2D;
-    currentPoint: Point;
-    previousPoint: Point | null;
-}
+  context: CanvasRenderingContext2D;
+  currentPoint: Point;
+  previousPoint: Point | null;
+};
 
-type Point = { x: number; y: number }
+type DrawLineProps = Draw & {
+  color: string;
+};
 
-export type { Draw, Point};
+type Point = { x: number; y: number };
+
+export type { Draw, Point, DrawLineProps };

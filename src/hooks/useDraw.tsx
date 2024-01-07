@@ -1,85 +1,116 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { Draw, Point } from '../types';
+import { useEffect, useRef, useState } from "react";
+import type { Draw, DrawLineProps, Point } from "../types";
+import { io } from "socket.io-client";
+import { drawLine } from "@/utils/drawLine";
 
-export const useDraw = ({ color } : { color: string}) => {
-    const [isMouseDown, setIsMouseDown] = useState(false);
+const socket = io("http://localhost:3001");
 
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const previousPoint = useRef<null | Point>(null);
+export const useDraw = ({ color }: { color: string }) => {
+  const [isMouseDown, setIsMouseDown] = useState(false);
 
-    const onMouseDown = () => setIsMouseDown(true);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previousPoint = useRef<null | Point>(null);
 
-    const onDraw = useCallback(({previousPoint, currentPoint, context}: Draw) => {
-        const lineColor = color;
-        const lineWidth = 5;
+  const onMouseDown = () => setIsMouseDown(true);
 
-        let startPoint = previousPoint ?? currentPoint;
-        context.beginPath();
-        context.lineWidth = lineWidth;
-        context.strokeStyle = lineColor;
-        context.moveTo(startPoint.x, startPoint.y);
-        context.lineTo(currentPoint.x, currentPoint.y);
-        context.stroke();
+  function createLine({ previousPoint, currentPoint, context }: Draw) {
+    socket.emit("draw-line", { previousPoint, currentPoint, color });
+    drawLine({ previousPoint, currentPoint, context, color });
+  }
 
-        context.fillStyle = lineColor;
-        context.beginPath();
-        context.arc(startPoint.x, startPoint.y, 2, 0, 2 * Math.PI);
-        context.fill();
-      }, [color]);
+  const onClear = () => {
+    const currentCanvas = canvasRef.current;
+    if (!currentCanvas) return null;
+    const context = currentCanvas.getContext("2d");
 
-      const onClear = () => {
-        const currentCanvas = canvasRef.current;
-        if(!currentCanvas) return null;
-        const context = currentCanvas.getContext('2d');
+    if (!context) return null;
 
-        if(!context) return null;
+    context.clearRect(0, 0, currentCanvas.width, currentCanvas.height);
+  };
 
-        context.clearRect(0, 0, currentCanvas.width, currentCanvas.height)
-      }
+  useEffect(() => {
+    const context = canvasRef.current?.getContext("2d");
 
-    useEffect(() => {
-        const currentCanvas = canvasRef.current;
+    socket.emit("client-ready");
 
-        const mouseMoveHandler = (event: MouseEvent) => {
-            if(!isMouseDown) return null;
-            const currentPoint = computePointInCanvas(event);
+    socket.on("get-canvas-state", () => {
+      if (!canvasRef.current?.toDataURL()) return;
+      socket.emit("canvas-state", canvasRef.current.toDataURL());
+    });
 
-            const context = currentCanvas?.getContext('2d');
+    socket.on("canvas-state-from-server", (state: string) => {
+      const img = new Image();
+      img.src = state;
+      img.onload = () => {
+        context?.drawImage(img, 0, 0);
+      };
+    });
 
-            if(!context || !currentPoint) return null;
+    socket.on(
+      "draw-line",
+      ({ previousPoint, currentPoint, color }: DrawLineProps) => {
+        if (!context) return;
+        drawLine({ previousPoint, currentPoint, context, color });
+      },
+    );
 
-            onDraw({context, currentPoint, previousPoint: previousPoint.current});
-            previousPoint.current = currentPoint;
-        };
+    socket.on("clear", onClear);
 
-        const mouseUpHandler = () => {
-            setIsMouseDown(false);
-            previousPoint.current = null;
-        };
+    return () => {
+      socket.off("client-ready");
+      socket.off("get-canvas-state");
+      socket.off("canvas-state-from-server");
+      socket.off("draw-line");
+      socket.off("clear");
+    };
+  }, [canvasRef]);
 
-        const computePointInCanvas = (event: MouseEvent): Point | null => {
-            const canvas = canvasRef.current;
+  useEffect(() => {
+    const currentCanvas = canvasRef.current;
 
-            if(!canvas) return null;
+    const mouseMoveHandler = (event: MouseEvent) => {
+      if (!isMouseDown) return null;
+      const currentPoint = computePointInCanvas(event);
 
-            const rect = canvas.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top
+      const context = currentCanvas?.getContext("2d");
 
-            return { x, y};
-        }
+      if (!context || !currentPoint) return null;
 
-        // Add event listeners
-        currentCanvas?.addEventListener('mousemove', mouseMoveHandler);
-        window.addEventListener('mouseup', mouseUpHandler)
+      createLine({
+        context,
+        currentPoint,
+        previousPoint: previousPoint.current,
+      });
+      previousPoint.current = currentPoint;
+    };
 
-        // Remove event listeners
-        return () => {
-            currentCanvas?.removeEventListener('mousemove', mouseMoveHandler);
-            window.removeEventListener('mouseup', mouseUpHandler)
-        }
+    const mouseUpHandler = () => {
+      setIsMouseDown(false);
+      previousPoint.current = null;
+    };
 
-    }, [onDraw, isMouseDown]);
+    const computePointInCanvas = (event: MouseEvent): Point | null => {
+      const canvas = canvasRef.current;
 
-    return { canvasRef, onMouseDown, onClear };
-}
+      if (!canvas) return null;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      return { x, y };
+    };
+
+    // Add event listeners
+    currentCanvas?.addEventListener("mousemove", mouseMoveHandler);
+    window.addEventListener("mouseup", mouseUpHandler);
+
+    // Remove event listeners
+    return () => {
+      currentCanvas?.removeEventListener("mousemove", mouseMoveHandler);
+      window.removeEventListener("mouseup", mouseUpHandler);
+    };
+  }, [createLine, isMouseDown]);
+
+  return { canvasRef, onMouseDown, onClear };
+};
